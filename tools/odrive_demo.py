@@ -14,6 +14,9 @@ import math
 print("finding an odrive...")
 my_drive = odrive.find_any()
 
+# Find an ODrive that is connected on the serial port /dev/ttyUSB0
+#my_drive = odrive.find_any("serial:/dev/ttyUSB0")
+
 # Calibrate motor and wait for it to finish
 print("starting calibration...")
 my_drive.axis0.requested_state = AXIS_STATE_FULL_CALIBRATION_SEQUENCE
@@ -26,7 +29,7 @@ my_drive.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
 print("Bus voltage is " + str(my_drive.vbus_voltage) + "V")
 
 # Or to change a value, just assign to the property
-my_drive.axis0.controller.input_pos = 3.14
+my_drive.axis0.controller.pos_setpoint = 3.14
 print("Position setpoint is " + str(my_drive.axis0.controller.pos_setpoint))
 
 # And this is how function calls are done:
@@ -36,9 +39,9 @@ for i in [1,2,3,4]:
 # A sine wave to test
 t0 = time.monotonic()
 while True:
-    setpoint = 4.0 * math.sin((time.monotonic() - t0)*2)
+    setpoint = 10000.0 * math.sin((time.monotonic() - t0)*2)
     print("goto " + str(int(setpoint)))
-    my_drive.axis0.controller.input_pos = setpoint
+    my_drive.axis0.controller.pos_setpoint = setpoint
     time.sleep(0.01)
 
 # Some more things you can try:

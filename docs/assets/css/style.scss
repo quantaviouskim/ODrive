@@ -100,7 +100,7 @@ table {
   width:100%;
   border-collapse:collapse;
   display: block;
-  overflow-x: auto;
+  overflow-x: scroll;
 }
 
 th, td {
@@ -128,12 +128,10 @@ header {
   float:left;
   position:fixed;
   -webkit-font-smoothing:subpixel-antialiased;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  top: 0;
+  
+  overflow-y: auto;
+  top: 50px;
   bottom: 0;
-  padding: 10px 0;
 }
 
 
@@ -263,11 +261,7 @@ a {
 }
 
 h1 a {
-  color: unset;
-}
-
-.navitem a {
-  color: unset;
+    color: unset;
 }
 
 // a:hover, a:focus {
@@ -276,7 +270,6 @@ h1 a {
 // }
 
 /*** Navigation bar ***/
-
 header > div {
   margin-right: 20px;
 }
@@ -294,71 +287,42 @@ header li {
 
 #navbar {
   max-width: 250px;
-  flex: 1;
-  overflow: auto;
-  margin: 0;
 }
 
-.navgroup {
-  background: #cbcbcb;
-  margin-top: 20px;
-}
-.navgroup:first-child {
-  margin-top: 0px;
-}
-
-#navbar ul {
-  background-color: rgba(255, 255, 255, 0.87);
-  margin: 0;
-}
-
-.navheader {
-    margin:0px;
+header ul p {
+    margin:0;
     padding-left:5px;
     display: block;
 //     color: #d60000;
     color: #000;
     font-weight: bold;
+    background-color: #cbcbcb;
 }
 
-.navitem {
+header ul ul li a {
+  background: #f8f8f8;
   //border:1px solid #e0e0e0;
+  line-height:1;
   font-size:12px;
   font-weight: bold;
   color:#676767;
-  display:flex;
+  display:block;
   text-align:left;
-  padding:0px 5px;
-  margin:0px;
-  height:37px;
-  line-height:37px;
+  padding:12px 0px 5px 5px;
+  //margin:12px;
+  height:20px;
 }
 
-.navitem a {
-  display: block;
-  width: 100%;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.levelbar {
-  float: inline-start;
-  margin-left: 8px;
-  margin-right: 5px;
-  border-left: 1px solid rgba(0, 0, 0, 0.3);
-  width: 1px !important;
-}
-
-.currentitem {
-  //-webkit-box-shadow: inset 0px 0px 5px 3px #aa0000a6;
-  //-moz-box-shadow: inset 0px 0px 5px 3px #aa0000a6;
-  //box-shadow: inset 0px 0px 5px 3px #aa0000a6;
-  color: #d60000;
-}
+//// rounded edges (look bad)
+//header ul p {
+//  border-radius:5px 5px 0 0;
+//}
+//header ul ul li:last-child a {
+//  border-radius:0 0 5px 5px;
+//}
 
 /*** Navbar Hover ***/
-.navitem:hover, .navitem:focus {
+header ul a:hover, header ul a:focus {
   color: #d60000;
 //   color:rgb(0, 0, 0);
 //   background-color: rgba(0, 0, 0, 0.24);
@@ -454,13 +418,10 @@ details > div > p:last-child {
     border-left-color: #5bc0de;
 }
 
-/*** edit/download link ***/
-.pageactions {
+/*** edit link ***/
+.edit {
   float: right;
   font-size: 12px;
-}
-.pageactions > div {
-  text-align: right;
 }
 
 /*** inline code ***/
@@ -479,39 +440,4 @@ table th {
 
 table tr:nth-child(2n) {
   background-color: #f8f8f8;
-}
-
-
-.expandable-list {
-  height: 100%;
-  margin: 0px;
-  //background-color: #ffbfbf61;
-  max-height: 0;
-  overflow: hidden;
-  -webkit-transition: max-height .5s ease-in-out;
-  transition: max-height .5s ease-in-out;
-}
-
-#navbar input[type=checkbox]:checked ~ .expandable-list { /* reset the height when checkbox is checked */
-  max-height: 1000px;
-}
-
-.chevron:before {
-  text-align: left;
-  content: "\3009"
-}
-
-.chevron {
-  float: left;
-  -webkit-transition: -webkit-transform .5s ease;
-  transition: transform .5s ease;
-  transform-origin: 40% 50%;
-  padding-left: 5px;
-  padding-right: 5px;
-}
-  
-#navbar input[type=checkbox]:checked ~ p .chevron { /* rotate down when checkbox is checked */
-  -webkit-transform: rotate(90deg);
-  -ms-transform: rotate(90deg);
-  transform: rotate(90deg);
 }

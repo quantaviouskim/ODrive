@@ -20,13 +20,6 @@ import odrive
 from odrive.utils import Event, OperationAbortedException
 from odrive.dfuse import *
 
-if sys.version_info < (3, 0):
-    _print = print
-    def print(*vals, **kwargs):
-        _print(*vals)
-        if kwargs.get('flush', False):
-            sys.stdout.flush()
-
 try:
     from intelhex import IntelHex
 except:
@@ -149,8 +142,8 @@ class FirmwareFromGithub(Firmware):
 
         hw_version_regex = r'.*v([0-9]+).([0-9]+)(-(?P<voltage>[0-9]+)V)?.hex'
         hw_version_match = re.search(hw_version_regex, asset_json['name'])
-        self.hw_version = (int(hw_version_match.group(1)),
-                          int(hw_version_match.group(2)),
+        self.hw_version = (int(hw_version_match[1]),
+                          int(hw_version_match[2]),
                           int(hw_version_match.groupdict().get('voltage') or 0))
         self.github_asset_id = asset_json['id']
         self.hex = None
@@ -163,7 +156,7 @@ class FirmwareFromGithub(Firmware):
         """
         if self.hex is None:
             print("Downloading firmware {}...".format(get_fw_version_string(self.fw_version)))
-            response = requests.get('https://api.github.com/repos/odriverobotics/ODrive/releases/assets/' + str(self.github_asset_id),
+            response = requests.get('https://api.github.com/repos/madcowswe/ODrive/releases/assets/' + str(self.github_asset_id),
                                     headers={'Accept': 'application/octet-stream'})
             if response.status_code != 200:
                 raise Exception("failed to download firmware")
@@ -178,7 +171,7 @@ class FirmwareFromFile(Firmware):
         return self._file
 
 def get_all_github_firmwares():
-    response = requests.get('https://api.github.com/repos/odriverobotics/ODrive/releases')
+    response = requests.get('https://api.github.com/repos/madcowswe/ODrive/releases')
     if response.status_code != 200:
         raise Exception("could not fetch releases")
     response_json = response.json()
@@ -223,19 +216,16 @@ def put_into_dfu_mode(device, cancellation_token):
     Puts the specified device into DFU mode
     """
     if not hasattr(device, "enter_dfu_mode"):
-        print("The firmware on device {:08X} cannot soft enter DFU mode.\n"
-              "Please remove power, put the DFU switch into DFU mode,\n"
-              "then apply power again. Then try again.\n"
-              "If it still doesn't work, you can try to use the DeFuse app or \n"
-              "dfu-util, see the odrive documentation.\n"
-              "You can also flash the firmware using STLink (`make flash`)"
-              .format(device.serial_number))
+        print("The firmware on device {} does not support DFU. You need to \n"
+              "flash the firmware once using STLink (`make flash`), after that \n"
+              "DFU with this script should work fine."
+              .format(device.__channel__.usb_device.serial_number))
         return
         
-    print("Putting device {:08X} into DFU mode...".format(device.serial_number))
+    print("Putting device {} into DFU mode...".format(device.__channel__.usb_device.serial_number))
     try:
         device.enter_dfu_mode()
-    except fibre.ObjectLostError:
+    except fibre.ChannelBrokenException:
         pass # this is expected because the device reboots
     if platform.system() == "Windows":
         show_deferred_message("Still waiting for the device to reappear.\n"
@@ -247,47 +237,12 @@ def find_device_in_dfu_mode(serial_number, cancellation_token):
     Polls libusb until a device in DFU mode is found
     """
     while not cancellation_token.is_set():
-        stm_devices = usb.core.find(idVendor=0x0483, idProduct=0xdf11, find_all=True)
-        for dev in stm_devices:
-            try:
-                if (serial_number is None) or (dev.serial_number == serial_number):
-                    return dev
-            except ValueError:
-                print("found device but could not check serial number (retrying in 1s)")
+        params = {} if serial_number == None else {'serial_number': serial_number}
+        stm_device = usb.core.find(idVendor=0x0483, idProduct=0xdf11, **params)
+        if stm_device != None:
+            return stm_device
         time.sleep(1)
     return None
-
-def get_hw_version_in_dfu_mode(dfudev):
-    """
-    Reads the hardware version from one-time-programmable memory.
-    This is written on all ODrives sold since Summer 2018.
-    """
-    otp_sector = [s for s in dfudev.sectors if s['name'] == 'OTP Memory' and s['addr'] == 0x1fff7800][0]
-    otp_data = dfudev.read_sector(otp_sector)
-    if otp_data[0] == 0:
-        otp_data = otp_data[16:]
-    if otp_data[0] == 0xfe:
-        return (otp_data[3], otp_data[4], otp_data[5])
-    else:
-        return None
-
-def unlock_device(serial_number, cancellation_token):
-    print("Looking for ODrive in DFU mode...")
-    print("If the program hangs at this point, try to set the DFU switch to \"DFU\" and power cycle the ODrive.")
-
-    stm_device = find_device_in_dfu_mode(serial_number, cancellation_token)
-    dfudev = DfuDevice(stm_device)
-
-    print("Unlocking device (this may take a few seconds)...")
-    dfudev.unprotect()
-    print("done")
-    print("")
-    print("Now do the following:")
-    print(" 1. Put the DFU switch on the ODrive to \"DFU\"")
-    print(" 2. Power-cycle the ODrive")
-    print(" 3. Run \"odrivetool dfu\" (or any third party DFU tool)")
-    print(" 4. Put the DFU switch on the ODrive to \"RUN\"")
-
 
 def update_device(device, firmware, logger, cancellation_token):
     """
@@ -300,17 +255,23 @@ def update_device(device, firmware, logger, cancellation_token):
     """
 
     if isinstance(device, usb.core.Device):
-        found_in_dfu = True
         serial_number = device.serial_number
         dfudev = DfuDevice(device)
         if (logger._verbose):
             logger.debug("OTP:")
             dump_otp(dfudev)
-        hw_version = get_hw_version_in_dfu_mode(dfudev) or (0, 0, 0)
 
+        # Read hardware version from one-time-programmable memory
+        otp_sector = [s for s in dfudev.sectors if s['name'] == 'OTP Memory' and s['addr'] == 0x1fff7800][0]
+        otp_data = dfudev.read_sector(otp_sector)
+        if otp_data[0] == 0:
+            otp_data = otp_data[16:]
+        if otp_data[0] == 0xfe:
+            hw_version = (otp_data[3], otp_data[4], otp_data[5])
+        else:
+            hw_version = (0, 0, 0)
     else:
-        found_in_dfu = False
-        serial_number = "{:08X}".format(device.serial_number)
+        serial_number = device.__channel__.usb_device.serial_number
         dfudev = None
 
         # Read hardware version as reported from firmware
@@ -330,7 +291,7 @@ def update_device(device, firmware, logger, cancellation_token):
     fw_version_major = device.fw_version_major if hasattr(device, 'fw_version_major') else 0
     fw_version_minor = device.fw_version_minor if hasattr(device, 'fw_version_minor') else 0
     fw_version_revision = device.fw_version_revision if hasattr(device, 'fw_version_revision') else 0
-    fw_version_prerelease = device.fw_version_unreleased != 0 if hasattr(device, 'fw_version_unreleased') else True
+    fw_version_prerelease = device.fw_version_prerelease if hasattr(device, 'fw_version_prerelease') else True
     fw_version = (fw_version_major, fw_version_minor, fw_version_revision, fw_version_prerelease)
 
     print("Found ODrive {} ({}) with firmware {}{}".format(
@@ -344,7 +305,7 @@ def update_device(device, firmware, logger, cancellation_token):
             if dfudev is None:
                 suggestion = 'You have to manually flash an up-to-date firmware to make automatic checks work. Run `odrivetool dfu --help` for more info.'
             else:
-                suggestion = 'Please contact info@odriverobotics.com with your order number for help.'
+                suggestion = 'Run "make write_otp" to program the board version.'
             raise Exception('Cannot check online for new firmware because the board version is unknown. ' + suggestion)
         print("Checking online for newest firmware...", end='')
         firmware = get_newest_firmware(hw_version)
@@ -376,7 +337,6 @@ def update_device(device, firmware, logger, cancellation_token):
         logger.debug(" {:08X} to {:08X}".format(start, end - 1))
 
     # Back up configuration
-    do_backup_config = False
     if dfudev is None:
         do_backup_config = device.user_config_loaded if hasattr(device, 'user_config_loaded') else False
         if do_backup_config:
@@ -391,16 +351,6 @@ def update_device(device, firmware, logger, cancellation_token):
         stm_device = find_device_in_dfu_mode(serial_number, cancellation_token)
         find_odrive_cancellation_token.set()
         dfudev = DfuDevice(stm_device)
-
-    hw_version = get_hw_version_in_dfu_mode(dfudev)
-    if hw_version is None:
-        logger.error("Could not determine hardware version. Flashing precompiled "
-                     "firmware could lead to unexpected results. Please use an "
-                     "STLink/2 to force-update the firmware anyway. Refer to "
-                     "https://docs.odriverobotics.com/developer-guide for details.")
-        # Jump to application
-        dfudev.jump_to_application(0x08000000)
-        return
 
     logger.debug("Sectors on device: ")
     for sector in dfudev.sectors:
@@ -418,11 +368,9 @@ def update_device(device, firmware, logger, cancellation_token):
 
     # Erase
     try:
-        internal_flash_sectors = [sector for sector in dfudev.sectors if sector['name'] == 'Internal Flash']
-        for i, sector in enumerate(dfudev.sectors):
-            if sector['name'] == 'Internal Flash':
-                print("Erasing... (sector {}/{})  \r".format(i, len(internal_flash_sectors)), end='', flush=True)
-                dfudev.erase_sector(sector)
+        for i, (sector, data) in enumerate(touched_sectors):
+            print("Erasing... (sector {}/{})  \r".format(i, len(touched_sectors)), end='', flush=True)
+            dfudev.erase_sector(sector)
         print('Erasing... done            \r', end='', flush=True)
     finally:
         print('', flush=True)
@@ -462,21 +410,15 @@ def update_device(device, firmware, logger, cancellation_token):
     # Jump to application
     dfudev.jump_to_application(0x08000000)
 
-    if not found_in_dfu:
-        logger.info("Waiting for the device to reappear...")
-        device = odrive.find_any(odrive.default_usb_search_path, serial_number,
-                        cancellation_token, timeout=30)
+    logger.info("Waiting for the device to reappear...")
+    device = odrive.find_any("usb", serial_number,
+                    cancellation_token, cancellation_token, timeout=30)
 
-        if do_backup_config:
-            temp_config_filename = odrive.configuration.get_temp_config_filename(device)
-            odrive.configuration.restore_config(device, None, logger)
-            os.remove(temp_config_filename)
-        
-        logger.success("Device firmware update successful.")
-    else:
-        logger.success("Firmware upload successful.")
-        logger.info("To complete the firmware update, set the DFU switch to \"RUN\" and power cycle the board.")
-    
+    if do_backup_config:
+        odrive.configuration.restore_config(device, None, logger)
+        os.remove(odrive.configuration.get_temp_config_filename(device))
+
+    logger.success("Device firmware update successful.")
 
 def launch_dfu(args, logger, cancellation_token):
     """
@@ -502,8 +444,8 @@ def launch_dfu(args, logger, cancellation_token):
 
     # Scan for ODrives not in DFU mode
     # We only scan on USB because DFU is only implemented over USB
-    devices[1] = odrive.find_any(odrive.default_usb_search_path, serial_number,
-        find_odrive_cancellation_token)
+    devices[1] = odrive.find_any("usb", serial_number,
+        find_odrive_cancellation_token, cancellation_token)
     find_odrive_cancellation_token.set()
     
     device = devices[0] or devices[1]

@@ -1,6 +1,6 @@
-#include <cmath>
+#include <math.h>
 #include "odrive_main.h"
-#include "utils.hpp"
+#include "utils.h"
 
 // A sign function where input 0 has positive sign (not 0)
 float sign_hard(float val) {
@@ -14,6 +14,8 @@ float sign_hard(float val) {
 // s                          Direction (sign) of the trajectory
 // Vmax, Amax, Dmax and jmax  Kinematic bounds
 // Ar, Dr and Vr              Reached values of acceleration and velocity
+
+TrapezoidalTrajectory::TrapezoidalTrajectory(Config_t& config) : config_(config) {}
 
 bool TrapezoidalTrajectory::planTrapezoidal(float Xf, float Xi, float Vi,
                                             float Vmax, float Amax, float Dmax) {
@@ -42,7 +44,7 @@ bool TrapezoidalTrajectory::planTrapezoidal(float Xf, float Xi, float Vi,
     // Are we displacing enough to reach cruising speed?
     if (s*dX < s*dXmin) {
         // Short move (triangle profile)
-        Vr_ = s * std::sqrt(std::max((Dr_*SQ(Vi) + 2*Ar_*Dr_*dX) / (Dr_ - Ar_), 0.0f));
+        Vr_ = s * sqrtf((Dr_*SQ(Vi) + 2*Ar_*Dr_*dX) / (Dr_ - Ar_));
         Ta_ = std::max(0.0f, (Vr_ - Vi) / Ar_);
         Td_ = std::max(0.0f, -Vr_ / Dr_);
         Tv_ = 0.0f;
